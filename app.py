@@ -117,7 +117,7 @@ window.addEventListener('message',(e)=>{
     components.html(html, height=530, scrolling=False)
 
 st.sidebar.title("⚙️ Control panel")
-page = st.sidebar.radio("Navigate", ["Live Simulator", "Theory & Derivation", "Observation Table", "Graphs & Analysis", "Viva Practice"])
+page = st.sidebar.radio("Navigate", ["Live Simulator", "Theory & Derivation", "Observation Table", "Graphs & Analysis", "Advanced Dynamics", "Design Studio", "Uncertainty & Report", "Viva Practice"])
 mode_label = st.sidebar.radio("Operating mode", ["Automatic demonstration", "Falling-mass experiment"])
 mode = "demo" if mode_label == "Automatic demonstration" else "experiment"
 
@@ -235,6 +235,163 @@ elif page == "Graphs & Analysis":
     st.plotly_chart(fig, use_container_width=True)
     st.latex(r"\\omega(t)=\\omega_0\\left(1-\\frac{t}{t_{\\mathrm{stop}}}\\right),\\quad 0\\leq t\\leq t_{\\mathrm{stop}}")
     st.caption("Illustrative model: actual friction may vary with speed, bearing condition, and alignment.")
+
+
+elif page == "Advanced Dynamics":
+    st.header("Advanced rotational dynamics")
+    st.caption("Explore the flywheel as a dynamical system, not just as a rotating picture.")
+    tab1, tab2, tab3 = st.tabs(["Torque model", "Energy ledger", "Motion explorer"])
+    with tab1:
+        st.subheader("Coupled falling mass and flywheel")
+        st.latex(r"mg-T=ma,\qquad Tr-\tau_f=I\alpha,\qquad a=r\alpha")
+        m_adv = st.slider("Falling mass (kg)", 0.05, 1.00, 0.20, 0.01, key="adv_m")
+        r_adv = st.slider("Axle radius (m)", 0.005, 0.050, 0.020, 0.001, key="adv_r")
+        I_adv = st.slider("Flywheel inertia (kg m²)", 0.0005, 0.0500, 0.0030, 0.0005, format="%.4f", key="adv_I")
+        tau_adv = st.slider("Opposing friction torque (N m)", 0.0, 0.050, 0.001, 0.0005, format="%.4f", key="adv_tau")
+        effective = I_adv + m_adv * r_adv**2
+        alpha_adv = (m_adv * G * r_adv - tau_adv) / (I_adv + m_adv * r_adv**2)
+        if alpha_adv > 0:
+            a_adv = r_adv * alpha_adv
+            tension = m_adv * (G - a_adv)
+            st.success("The mass accelerates downward for these parameters.")
+        else:
+            a_adv, tension = 0.0, float("nan")
+            st.warning("The selected friction torque is at least as large as the driving torque; spontaneous downward acceleration is not predicted by this idealized model.")
+        x1, x2, x3 = st.columns(3)
+        x1.metric("Angular acceleration", f"{alpha_adv:.3f} rad/s²")
+        x2.metric("Linear acceleration", f"{a_adv:.3f} m/s²")
+        x3.metric("String tension", f"{tension:.3f} N" if np.isfinite(tension) else "No descent")
+        st.markdown("**Model assumptions:** no slip between string and axle, negligible string mass, constant axle radius, and constant opposing friction torque.")
+    with tab2:
+        st.subheader("Energy ledger for a falling mass")
+        m_e = st.number_input("Mass (kg)", 0.01, 5.0, 0.20, 0.01, key="energy_m")
+        h_e = st.number_input("Drop height (m)", 0.01, 5.0, 0.60, 0.01, key="energy_h")
+        v_e = st.number_input("Mass speed at detachment (m/s)", 0.0, 20.0, 0.80, 0.05, key="energy_v")
+        w_e = st.number_input("Flywheel angular speed (rad/s)", 0.0, 500.0, 25.0, 0.5, key="energy_w")
+        I_e = st.number_input("Flywheel inertia (kg m²)", 0.0001, 10.0, 0.003, 0.0001, format="%.4f", key="energy_I")
+        Ein = m_e * G * h_e
+        transl = 0.5 * m_e * v_e**2
+        rot = 0.5 * I_e * w_e**2
+        residual = Ein - transl - rot
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Potential energy lost", f"{Ein:.4f} J")
+        c2.metric("Translational KE", f"{transl:.4f} J")
+        c3.metric("Rotational KE", f"{rot:.4f} J")
+        c4.metric("Unaccounted energy", f"{residual:.4f} J")
+        if residual < -1e-9:
+            st.error("The kinetic-energy total exceeds the available gravitational potential energy. Check the inputs or model assumptions.")
+        else:
+            st.info("The residual represents energy available for frictional dissipation and other losses under this simplified ledger.")
+        ledger = pd.DataFrame({"Energy term":["Potential energy lost","Translational kinetic energy","Rotational kinetic energy","Residual / losses"],"Energy (J)":[Ein,transl,rot,max(0,residual)]})
+        fig_energy = px.bar(ledger, x="Energy term", y="Energy (J)", title="Energy distribution")
+        fig_energy.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig_energy, use_container_width=True)
+    with tab3:
+        st.subheader("Angular motion under constant friction torque")
+        I_m = st.number_input("Moment of inertia (kg m²)", min_value=0.0001, value=0.0030, format="%.5f", key="motion_I")
+        rpm_m = st.slider("Initial angular speed (RPM)", 5, 300, 90, key="motion_rpm")
+        tau_m = st.slider("Friction torque (N m)", 0.0001, 0.0200, 0.0010, 0.0001, format="%.4f", key="motion_tau")
+        w0 = rpm_m * 2 * math.pi / 60
+        decel = tau_m / I_m
+        t_stop_m = w0 / decel
+        tt = np.linspace(0, t_stop_m, 250)
+        ww = np.maximum(0, w0 - decel * tt)
+        theta = w0 * tt - 0.5 * decel * tt**2
+        frame = pd.DataFrame({"Time (s)":tt,"Angular velocity (rad/s)":ww,"Angular displacement (rad)":theta})
+        fig_m = px.line(frame, x="Time (s)", y="Angular velocity (rad/s)", title="Predicted spin-down")
+        fig_m.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig_m, use_container_width=True)
+        st.metric("Predicted stopping time", f"{t_stop_m:.2f} s")
+        st.metric("Predicted turns before rest", f"{theta[-1]/(2*math.pi):.2f} revolutions")
+        st.caption("This idealized model assumes a constant friction torque. Real bearings may exhibit speed-dependent and static friction.")
+
+elif page == "Design Studio":
+    st.header("Flywheel design studio")
+    st.caption("Compare idealized mass distributions and see how geometry affects rotational inertia.")
+    geometry = st.selectbox("Idealized geometry", ["Uniform solid disk", "Thin ring", "Thick-walled cylinder"])
+    M = st.slider("Flywheel mass (kg)", 0.1, 20.0, 2.0, 0.1)
+    R = st.slider("Outer radius (m)", 0.05, 1.0, 0.30, 0.01)
+    if geometry == "Uniform solid disk":
+        I_geom = 0.5 * M * R**2
+        formula = r"I=\frac{1}{2}MR^2"
+    elif geometry == "Thin ring":
+        I_geom = M * R**2
+        formula = r"I=MR^2"
+    else:
+        ri = st.slider("Inner radius (m)", 0.0, max(0.01, R-0.01), min(0.15, R-0.01), 0.01)
+        I_geom = 0.5 * M * (R**2 + ri**2)
+        formula = r"I=\frac{1}{2}M(R_o^2+R_i^2)"
+    rpm_d = st.slider("Operating speed (RPM)", 10, 1000, 120, 10)
+    w_d = rpm_d * 2 * math.pi / 60
+    st.latex(formula)
+    a, b, c = st.columns(3)
+    a.metric("Moment of inertia", f"{I_geom:.5f} kg m²")
+    b.metric("Rotational kinetic energy", f"{0.5*I_geom*w_d**2:.3f} J")
+    c.metric("Angular momentum", f"{I_geom*w_d:.3f} kg m²/s")
+    comparison = pd.DataFrame({"Model":["Solid disk","Thin ring"],"Moment of inertia (kg m²)":[0.5*M*R**2,M*R**2]})
+    fig_d = px.bar(comparison, x="Model", y="Moment of inertia (kg m²)", title="Effect of mass distribution")
+    fig_d.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig_d, use_container_width=True)
+    st.info("For the same mass and outer radius, more mass concentrated near the rim gives a larger moment of inertia.")
+
+elif page == "Uncertainty & Report":
+    st.header("Uncertainty analysis & lab report")
+    st.write("Estimate how timing and rotation-count uncertainty propagate into the calculated moment of inertia. Enter measured values and their approximate uncertainties.")
+    m_u = st.number_input("Falling mass m (kg)", 0.001, 5.0, 0.200, 0.001, key="u_m")
+    dm_u = st.number_input("Mass uncertainty Δm (kg)", 0.0, 0.5, 0.001, 0.001, key="u_dm")
+    r_u = st.number_input("Axle radius r (m)", 0.0001, 0.2, 0.020, 0.0001, format="%.4f", key="u_r")
+    dr_u = st.number_input("Radius uncertainty Δr (m)", 0.0, 0.05, 0.0005, 0.0001, format="%.4f", key="u_dr")
+    n1_u = st.number_input("Turns during fall n₁", 0.1, 1000.0, 5.0, 0.5, key="u_n1")
+    n2_u = st.number_input("Extra turns n₂", 0.1, 1000.0, 20.0, 0.5, key="u_n2")
+    t_u = st.number_input("Stopping time t (s)", 0.01, 10000.0, 10.0, 0.1, key="u_t")
+    dt_u = st.number_input("Timing uncertainty Δt (s)", 0.0, 100.0, 0.2, 0.05, key="u_dt")
+    h_u = 2 * math.pi * r_u * n1_u
+    w_u = 4 * math.pi * n2_u / t_u
+    I_u = m_u * (2*G*h_u/w_u**2-r_u**2)/(1+n1_u/n2_u)
+    if I_u <= 0:
+        st.error("These values yield a non-positive inertia estimate. Review measurements and assumptions before reporting.")
+    else:
+        # Monte Carlo propagation; illustrative uncertainties for n1/n2 are treated as exact counts here.
+        rng = np.random.default_rng(2026)
+        samples = 30000
+        ms = np.maximum(1e-9, rng.normal(m_u, max(dm_u, 1e-12), samples))
+        rs = np.maximum(1e-9, rng.normal(r_u, max(dr_u, 1e-12), samples))
+        tsamp = np.maximum(1e-6, rng.normal(t_u, max(dt_u, 1e-12), samples))
+        hs = 2 * math.pi * rs * n1_u
+        wsamp = 4 * math.pi * n2_u / tsamp
+        Is = ms * (2*G*hs/wsamp**2-rs**2)/(1+n1_u/n2_u)
+        Is = Is[np.isfinite(Is) & (Is > 0)]
+        if len(Is) > 100:
+            low, high = np.percentile(Is, [2.5, 97.5])
+            st.metric("Moment of inertia estimate", f"{I_u:.6g} kg m²")
+            st.metric("Monte Carlo 95% interval", f"[{low:.6g}, {high:.6g}] kg m²")
+            st.caption(f"Monte Carlo used {samples:,} samples. This interval only reflects the entered mass, radius, and timing uncertainties; it does not include systematic errors or uncertainty in the rotation counts.")
+        report = f"""FLYWHEEL EXPERIMENT — LAB REPORT DRAFT
+
+Aim:
+To estimate the moment of inertia of a flywheel using the falling-mass method.
+
+Measured / entered values:
+Mass m = {m_u:.6g} kg
+Axle radius r = {r_u:.6g} m
+Turns during descent n1 = {n1_u:g}
+Additional turns n2 = {n2_u:g}
+Stopping time t = {t_u:.6g} s
+Drop height h = {h_u:.6g} m
+Angular speed at detachment ω = {w_u:.6g} rad/s
+
+Calculation:
+I = m(2gh/ω² - r²)/(1 + n1/n2)
+I = {I_u:.8g} kg m²
+
+Assumptions and limitations:
+Approximately constant angular deceleration after detachment; approximately constant frictional work per revolution; uncertainty interval does not include systematic errors.
+
+Result:
+The estimated moment of inertia is {I_u:.8g} kg m², subject to the stated assumptions and measurement uncertainties.
+"""
+        st.text_area("Report preview", report, height=340)
+        st.download_button("Download report draft (.txt)", report, file_name="flywheel_lab_report.txt", mime="text/plain")
 
 else:
     st.header("Viva practice")
