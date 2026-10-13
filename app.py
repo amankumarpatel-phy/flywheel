@@ -22,7 +22,7 @@ st.markdown("""
 
 G = 9.81
 
-def flywheel_animation(mode, rpm, mass, radius, drop_height, inertia, friction_torque, run_key):
+def flywheel_animation(mode, rpm, mass, radius, drop_height, inertia, friction_torque, run_key, released=False):
     # Canvas animation is rendered in the browser; it does not force Python reruns per frame.
     html = r"""
 <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -35,8 +35,8 @@ canvas{width:100%;height:100%;display:block}
 </style></head><body><div class="wrap"><div class="badge" id="badge">LIVE ROTATION · AUTOMATIC</div><canvas id="c"></canvas><div class="hint" id="hint">Canvas animation · physics-inspired visualization</div></div>
 <script>
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-const mode=__MODE__, targetRPM=__RPM__, m=__MASS__, r=__RADIUS__, h=__HEIGHT__, I=__INERTIA__, tau=__TAU__, runKey=__RUNKEY__;
-let angle=0, last=0, elapsed=0, phase=mode==='experiment'?'ready':'demo', omega=targetRPM*2*Math.PI/60, initialOmega=omega;
+const mode=__MODE__, targetRPM=__RPM__, m=__MASS__, r=__RADIUS__, h=__HEIGHT__, I=__INERTIA__, tau=__TAU__, runKey=__RUNKEY__, released=__RELEASED__;
+let angle=0, last=0, elapsed=0, phase=mode==='experiment'?(released?'falling':'ready'):'demo', omega=targetRPM*2*Math.PI/60, initialOmega=Math.max(3,Math.sqrt(Math.max(.1,2*m*9.81*h/Math.max(I,0.0001))));
 const badge=document.getElementById('badge'), hint=document.getElementById('hint');
 function resize(){const dpr=window.devicePixelRatio||1;canvas.width=canvas.clientWidth*dpr;canvas.height=canvas.clientHeight*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}
 window.addEventListener('resize',resize);resize();
@@ -112,7 +112,8 @@ window.addEventListener('message',(e)=>{
             .replace("__HEIGHT__", str(float(drop_height)))
             .replace("__INERTIA__", str(float(inertia)))
             .replace("__TAU__", str(float(friction_torque)))
-            .replace("__RUNKEY__", str(run_key)))
+            .replace("__RUNKEY__", str(run_key))
+            .replace("__RELEASED__", "true" if released else "false"))
     components.html(html, height=530, scrolling=False)
 
 st.sidebar.title("⚙️ Control panel")
@@ -141,16 +142,16 @@ if page == "Live Simulator":
             st.caption("Use the controls below to release the mass. The canvas animation runs in the browser independently of Streamlit reruns.")
         else:
             st.caption("The flywheel begins rotating automatically. Adjust RPM in the sidebar and observe the yellow reference mark.")
-        flywheel_animation(mode, rpm, mass, radius, drop_height, inertia, friction_torque, int(time.time()))
+        flywheel_animation(mode, rpm, mass, radius, drop_height, inertia, friction_torque, int(time.time()), st.session_state.get('released', False))
         if mode == "experiment":
             c1, c2 = st.columns(2)
             if c1.button("▶ Release mass", type="primary", use_container_width=True):
-                components.html("<script>parent.postMessage({type:'flywheel-release'}, '*');</script>", height=0)
                 st.session_state["released"] = True
+                st.rerun()
             if c2.button("↻ Reset experiment", use_container_width=True):
-                components.html("<script>parent.postMessage({type:'flywheel-reset'}, '*');</script>", height=0)
                 st.session_state["released"] = False
-            st.info("Browser components are isolated. If your browser does not pass the release command to the canvas, use the live animation as a visual model and use the calculations below for the numerical experiment.")
+                st.rerun()
+            st.caption("Release restarts the browser animation in the falling stage; reset returns it to the initial condition.")
     with right:
         st.subheader("Live physics panel")
         omega_demo = 2 * math.pi * rpm / 60
