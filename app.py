@@ -123,12 +123,12 @@ box(massGroup,0,0,0,.38,.42,.34,massMat);box(massGroup,0,.02,.18,.22,.23,.015,go
 cyl(massGroup,.045,.045,.12,0,.25,0,bright,'y',24);
 // small label plate
 box(scene,-2.0,2.9,0,.9,.42,.06,black);
-const state={running:true,mode:'free',time:0,angle:0,omega:42*2*Math.PI/60,alpha:0,drop:0,phase:'free',history:[]};
+const state={running:true,mode:'free',time:0,angle:0,omega:42*2*Math.PI/60,alpha:0,drop:0,velocity:0,phase:'free',history:[]};
 function el(id){return document.getElementById(id)}
 function params(){return {rpm:+el('rpm').value,m:+el('mass').value/1000,r:+el('radius').value/1000*1, I:+el('inertia').value/10000,tau:+el('tau').value/10000, speed:+el('speed').value/100}}
 function refreshLabels(){const p=params();el('rpmval').textContent=p.rpm+' RPM';el('massval').textContent=Math.round(p.m*1000)+' g';el('radiusval').textContent=Math.round(p.r*1000)+' mm';el('ival').textContent=p.I.toFixed(4)+' kg m²';el('tauval').textContent=p.tau.toFixed(4)+' N m';el('speedval').textContent=p.speed.toFixed(2)+'×';el('designlabel').textContent=el('design').selectedOptions[0].text}
 function setDesign(){const d=el('design').value;spokes.visible=d!=='disk';outer.visible=d==='disk';innerRing.visible=d!=='disk';torus.material=d==='rim'?gold:bright;innerTorus.visible=d==='precision';spokes.children.forEach(s=>s.scale.y=d==='precision'?.55:1);refreshLabels()}
-function reset(){state.time=0;state.angle=0;state.drop=0;state.history=[];state.phase=state.mode==='fall'?'ready':'free';state.omega=state.mode==='fall'?0:params().rpm*2*Math.PI/60;state.alpha=0;state.running=false;el('start').textContent='▶ Start';el('status').textContent=state.phase==='ready'?'READY TO RELEASE':'PAUSED / READY';updateTelemetry(0);massGroup.position.set(spoolX,1.2,spoolZ);massGroup.visible=state.mode==='fall';}
+function reset(){state.time=0;state.angle=0;state.drop=0;state.velocity=0;state.history=[];state.phase=state.mode==='fall'?'ready':'free';state.omega=state.mode==='fall'?0:params().rpm*2*Math.PI/60;state.alpha=0;state.running=false;el('start').textContent='▶ Start';el('status').textContent=state.phase==='ready'?'READY TO RELEASE':'PAUSED / READY';updateTelemetry(0);massGroup.position.set(spoolX,1.2,spoolZ);massGroup.visible=state.mode==='fall';}
 function start(){if(state.mode==='fall'&&state.phase==='ready'){state.phase='falling';state.time=0;state.drop=0;state.omega=0}state.running=true;el('start').textContent='● Running';el('status').textContent=state.mode==='fall'?'FALLING-MASS EXPERIMENT':'AUTO ROTATION'}
 function updateTelemetry(a){const w=state.omega;el('rpmout').textContent=(w*60/(2*Math.PI)).toFixed(1);el('wout').textContent=w.toFixed(2);el('aout').textContent=a.toFixed(2);el('tout').textContent=state.time.toFixed(2)}
 el('mode').addEventListener('change',()=>{state.mode=el('mode').value;massGroup.visible=state.mode==='fall';reset();if(state.mode==='free')start();el('explain').textContent=state.mode==='fall'?'Release the hanging mass. The numerical model couples its downward acceleration to the wheel torque.':'The rotor turns freely. Change the design and orbit the apparatus to inspect its construction.'});
@@ -142,10 +142,10 @@ function updateString(){const top=new THREE.Vector3(spoolX+spoolR,spoolY,spoolZ-
 let prev=performance.now();
 function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-prev)/1000,.04);prev=now;const p=params();let alpha=0;
 if(state.running){const ddt=dt*p.speed;state.time+=ddt;
- if(state.mode==='free'){if(p.tau>0){alpha=-p.tau/p.I;state.omega=Math.max(0,state.omega+alpha*ddt)}else{state.omega=p.rpm*2*Math.PI/60;alpha=0}}
+ if(state.mode==='free'){state.omega=p.rpm*2*Math.PI/60;alpha=0}
  else if(state.phase==='falling'){
    alpha=(p.m*9.81*p.r-p.tau)/(p.I+p.m*p.r*p.r);if(alpha<0)alpha=0;
-   const a=alpha*p.r;state.drop+=.5*a*ddt*ddt;state.omega+=alpha*ddt;
+   const a=alpha*p.r;state.drop+=state.velocity*ddt+.5*a*ddt*ddt;state.velocity+=a*ddt;state.omega+=alpha*ddt;
    if(state.drop>=1.15){state.drop=1.15;state.phase='coast';el('status').textContent='STRING DETACHED · COASTING'}
  }else if(state.phase==='coast'){alpha=-p.tau/p.I;state.omega=Math.max(0,state.omega+alpha*ddt);if(state.omega<=0){state.phase='stopped';state.running=false;el('status').textContent='ROTOR STOPPED';el('start').textContent='▶ Run again'}}
  state.angle+=state.omega*ddt;rotor.rotation.z=state.angle;
