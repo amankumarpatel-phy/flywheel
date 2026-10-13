@@ -117,7 +117,7 @@ window.addEventListener('message',(e)=>{
     components.html(html, height=530, scrolling=False)
 
 st.sidebar.title("⚙️ Control panel")
-page = st.sidebar.radio("Navigate", ["Live Simulator", "Theory & Derivation", "Observation Table", "Graphs & Analysis", "Advanced Dynamics", "Design Studio", "Uncertainty & Report", "Viva Practice"])
+page = st.sidebar.radio("Navigate", ["Live Simulator", "Why a Flywheel?", "Visual Playground", "Theory & Derivation", "Observation Table", "Graphs & Analysis", "Advanced Dynamics", "Design Studio", "Uncertainty & Report", "Viva Practice"])
 mode_label = st.sidebar.radio("Operating mode", ["Automatic demonstration", "Falling-mass experiment"])
 mode = "demo" if mode_label == "Automatic demonstration" else "experiment"
 
@@ -164,6 +164,86 @@ if page == "Live Simulator":
         st.write("2. A larger RPM means a greater angular speed.")
         st.write("3. In the real experiment, friction gradually reduces the wheel's speed after the string detaches.")
         st.caption("The automatic demo is illustrative; it is not a measurement of a real apparatus.")
+
+
+elif page == "Why a Flywheel?":
+    st.markdown("""
+    <div style="padding:28px;border-radius:22px;background:linear-gradient(120deg,#123456,#17223b);border:1px solid #52718f">
+    <div style="letter-spacing:3px;color:#9bdcff">THE BIG IDEA</div>
+    <h1>Why do machines need a flywheel?</h1>
+    <p style="font-size:19px;color:#d1e2f5">A flywheel stores rotational energy when the driving system supplies extra energy and releases some when the drive weakens. The result is smoother rotation.</p></div>
+    """, unsafe_allow_html=True)
+    left, right = st.columns([1, 2])
+    with left:
+        fluct = st.slider("Drive fluctuation", 0.0, 0.9, 0.65, 0.05)
+        inertia_visual = st.slider("Flywheel size / inertia", 0.2, 5.0, 2.5, 0.1)
+        base_speed = st.slider("Average speed (relative units)", 30, 180, 90, 5)
+        st.markdown("#### Think of it like this")
+        st.write("**Surplus drive:** the wheel stores energy.")
+        st.write("**Weak drive:** the wheel releases energy.")
+        st.write("**Net effect:** less variation in speed across a cycle.")
+    with right:
+        tv = np.linspace(0, 8, 500)
+        raw = base_speed * (1 + fluct*np.sin(2*np.pi*tv))
+        attenuated = fluct/(1+1.8*inertia_visual)
+        smooth = base_speed * (1 + attenuated*np.sin(2*np.pi*tv))
+        df = pd.DataFrame({"Time (s)":np.r_[tv,tv],"Relative speed":np.r_[raw,smooth],"System":["Without flywheel"]*len(tv)+["With flywheel"]*len(tv)})
+        fig = px.line(df,x="Time (s)",y="Relative speed",color="System",title="Speed fluctuation: conceptual comparison")
+        fig.update_layout(template="plotly_dark",paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig,use_container_width=True)
+    st.info("This graph is an illustrative teaching model, not measured data from a particular machine. A flywheel reduces cyclic speed variation; it does not create energy or guarantee perfectly constant speed.")
+    st.subheader("Where flywheels are useful")
+    c1,c2,c3 = st.columns(3)
+    with c1:
+        st.markdown("### Engine")
+        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Flywheel.jpg/640px-Flywheel.jpg",use_container_width=True)
+        st.caption("Helps smooth torque pulses between power strokes.")
+    with c2:
+        st.markdown("### Industrial machine")
+        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Flywheel.jpg/640px-Flywheel.jpg",use_container_width=True)
+        st.caption("Helps handle short-term changes in load.")
+    with c3:
+        st.markdown("### Energy storage")
+        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/Flywheel_energy_storage.jpg/640px-Flywheel_energy_storage.jpg",use_container_width=True)
+        st.caption("A rotating mass can store energy for later release.")
+    st.caption("External images require an internet connection; the graph is generated locally.")
+
+elif page == "Visual Playground":
+    st.header("Visual Playground")
+    st.caption("A more visual, classroom-friendly rotor explorer.")
+    style = st.selectbox("Flywheel design",["Classic spokes","Solid disk","Heavy rim","Precision rotor"])
+    rpm_vis = st.slider("Rotation speed (RPM)",1,180,35,key="visual_rpm")
+    spoke_count = st.slider("Number of spokes",4,16,8,2)
+    trails = st.toggle("Motion trail",True)
+    labels = st.toggle("Component labels",True)
+    style_key = {"Classic spokes":"spokes","Solid disk":"disk","Heavy rim":"rim","Precision rotor":"precision"}[style]
+    html = r"""
+    <div style="background:radial-gradient(ellipse at center,#1b3553,#07101c);border:1px solid #385270;border-radius:20px;overflow:hidden"><canvas id="rotor" style="width:100%;height:520px;display:block"></canvas></div>
+    <script>
+    const cv=document.getElementById('rotor'),ctx=cv.getContext('2d'),kind='__STYLE__',rpm=__RPM__,n=__N__,trailOn=__TRAIL__,labels=__LABEL__;
+    let a=0,last=0,tail=[];
+    function size(){const d=window.devicePixelRatio||1;cv.width=cv.clientWidth*d;cv.height=520*d;ctx.setTransform(d,0,0,d,0,0)}size();window.addEventListener('resize',size);
+    function draw(t){let dt=last?Math.min(.04,(t-last)/1000):0;last=t;a+=rpm*2*Math.PI/60*dt;
+      const W=cv.clientWidth,H=520,cx=W/2,cy=H/2-10,R=Math.min(W*.30,190);ctx.clearRect(0,0,W,H);
+      let g=ctx.createRadialGradient(cx-R*.2,cy-R*.2,5,cx,cy,R);g.addColorStop(0,'#42688d');g.addColorStop(1,'#102035');
+      ctx.beginPath();ctx.arc(cx,cy,R,0,2*Math.PI);ctx.fillStyle=kind==='disk'?'#243c56':g;ctx.fill();
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(a);
+      ctx.beginPath();ctx.arc(0,0,R-4,0,2*Math.PI);ctx.lineWidth=kind==='rim'?28:8;ctx.strokeStyle='#a9c4e2';ctx.stroke();
+      if(kind!=='disk'){for(let i=0;i<n;i++){let q=2*Math.PI*i/n;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo((R-14)*Math.cos(q),(R-14)*Math.sin(q));ctx.strokeStyle=i%2?'#72d8ff':'#e4f0ff';ctx.lineWidth=kind==='precision'?3:6;ctx.stroke()}}
+      if(kind==='precision'){ctx.beginPath();ctx.arc(0,0,R*.58,0,2*Math.PI);ctx.strokeStyle='#ffd166';ctx.lineWidth=3;ctx.stroke()}
+      ctx.beginPath();ctx.arc(0,0,13,0,2*Math.PI);ctx.fillStyle='#f4f8ff';ctx.fill();
+      ctx.beginPath();ctx.arc(R-7,0,7,0,2*Math.PI);ctx.fillStyle='#ffd166';ctx.fill();ctx.restore();
+      tail.push([cx+(R-7)*Math.cos(a),cy+(R-7)*Math.sin(a)]);if(tail.length>42)tail.shift();
+      if(trailOn){ctx.beginPath();tail.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.strokeStyle='rgba(255,209,102,.55)';ctx.lineWidth=2;ctx.stroke()}
+      ctx.textAlign='center';ctx.fillStyle='#eaf2ff';ctx.font='600 15px system-ui';ctx.fillText('LIVE FLYWHEEL',cx,cy+R+32);ctx.fillStyle='#a8bfd9';ctx.font='13px system-ui';ctx.fillText(rpm+' RPM  ·  '+(rpm*2*Math.PI/60).toFixed(2)+' rad/s',cx,cy+R+54);
+      if(labels){ctx.textAlign='left';ctx.fillStyle='#c4d9ef';ctx.fillText('AXLE',cx+16,cy-10);ctx.fillText('RIM',cx+R*.55,cy-R*.55)}
+      requestAnimationFrame(draw)}requestAnimationFrame(draw);
+    </script>
+    """
+    html=html.replace("__STYLE__",style_key).replace("__RPM__",str(rpm_vis)).replace("__N__",str(spoke_count)).replace("__TRAIL__","true" if trails else "false").replace("__LABEL__","true" if labels else "false")
+    components.html(html,height=545,scrolling=False)
+    st.markdown("### Try this in class")
+    st.write("Switch between a solid disk and a heavy rim. Ask students what they notice about the material distribution and why it can affect rotational inertia.")
 
 elif page == "Theory & Derivation":
     st.header("Physics behind the flywheel")
